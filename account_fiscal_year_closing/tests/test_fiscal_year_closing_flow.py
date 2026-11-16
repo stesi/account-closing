@@ -1,5 +1,7 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+from dateutil.relativedelta import relativedelta
+
 from odoo import Command, fields
 from odoo.exceptions import UserError
 from odoo.tests import Form, tagged
@@ -27,7 +29,7 @@ class TestFiscalYearClosingFlow(AccountTestInvoicingHttpCommon):
         move = cls.env["account.move"].create(
             {
                 "move_type": "entry",
-                "date": today.replace(month=3, day=1),
+                "date": today - relativedelta(month=3, day=1),
                 "journal_id": cls.journal.id,
                 "line_ids": [
                     Command.create(
@@ -122,15 +124,23 @@ class TestFiscalYearClosingFlow(AccountTestInvoicingHttpCommon):
         self.assertRecordValues(
             profit_loss.line_ids.sorted("balance"),
             [
-                {"account_id": self.revenue.id, "balance": 100.0},
                 {"account_id": self.result_account.id, "balance": -100.0},
-            ][::-1],
+                {"account_id": self.revenue.id, "balance": 100.0},
+            ],
         )
         closing.button_post()
         self.assertEqual(closing.state, "posted")
         self.assertEqual(moves.mapped("state"), ["posted"] * 3)
-        for action in (closing.button_open_moves(), closing.button_open_move_lines()):
-            self.env[action["res_model"]].search_count(action["domain"])
+        moves_action = closing.button_open_moves()
+        self.assertEqual(
+            self.env[moves_action["res_model"]].search_count(moves_action["domain"]),
+            3,
+        )
+        lines_action = closing.button_open_move_lines()
+        self.assertEqual(
+            self.env[lines_action["res_model"]].search_count(lines_action["domain"]),
+            6,
+        )
         with self.assertRaises(UserError):
             closing.unlink()
 
@@ -200,7 +210,7 @@ class TestFiscalYearClosingFlow(AccountTestInvoicingHttpCommon):
         draft = self.env["account.move"].create(
             {
                 "move_type": "entry",
-                "date": fields.Date.today().replace(month=4, day=1),
+                "date": fields.Date.today() - relativedelta(month=4, day=1),
                 "journal_id": self.journal.id,
                 "line_ids": [
                     Command.create({"account_id": self.receivable.id, "debit": 5}),
